@@ -1,0 +1,162 @@
+package io.mapsmessaging.n2k.codec;
+
+import com.google.gson.JsonObject;
+import io.mapsmessaging.n2k.compile.N2kCompiledField;
+import io.mapsmessaging.n2k.compile.N2kCompiledMessage;
+import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
+import io.mapsmessaging.n2k.model.N2kFieldType;
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
+public class N2kMessageParser {
+
+  private final N2kCompiledRegistry registry;
+
+  public JsonObject decodeToJson(int pgn, byte[] payload) {
+    N2kCompiledMessage message = registry.getRequiredMessage(pgn);
+
+    int requiredLengthBytes = message.getRequiredLengthBytesForDecode();
+    if (payload.length < requiredLengthBytes) {
+      throw new IllegalArgumentException(
+          "Payload too short for PGN " + pgn + ": have=" + payload.length + " required=" + requiredLengthBytes
+      );
+    }
+
+    JsonObject decoded = new JsonObject();
+
+    for (N2kCompiledField field : message.getFields()) {
+
+      long raw = N2kBitCodec.extractBits(
+          payload,
+          field.getStartByte(),
+          field.getStartBit(),
+          field.getBytesToRead(),
+          field.getMask(),
+          field.isSigned(),
+          field.getBitLength()
+      );
+
+      double value = raw * field.getResolution() + field.getOffset();
+
+      N2kFieldType fieldType = field.getFieldType();
+      if (fieldType == N2kFieldType.LOOKUP ||
+          fieldType == N2kFieldType.NUMBER ||
+          fieldType == N2kFieldType.FLOAT) {
+        decoded.addProperty(field.getId(), value);
+      }
+    }
+
+    JsonObject envelope = new JsonObject();
+    envelope.addProperty("pgn", pgn);
+    envelope.add("decoded", decoded);
+
+    return envelope;
+  }
+
+  public byte[] encodeFromJson(int pgn, JsonObject envelope) {
+    N2kCompiledMessage message = registry.getRequiredMessage(pgn);
+
+    JsonObject decoded = envelope.getAsJsonObject("decoded");
+    if (decoded == null) {
+      throw new IllegalArgumentException("Missing 'decoded' object");
+    }
+
+    int payloadLengthBytes = computePayloadLengthBytes(message, decoded);
+    byte[] payload = new byte[payloadLengthBytes];
+
+    for (N2kCompiledField field : message.getFields()) {
+      if (field.isReserved()) {
+        continue;
+      }
+
+      if (!decoded.has(field.getId())) {
+        continue;
+      }
+
+      N2kFieldType fieldType = field.getFieldType();
+      if (fieldType == N2kFieldType.STRING_FIX || fieldType == N2kFieldType.STRING_LAU) {
+        throw new UnsupportedOperationException("String fields not implemented yet for field " + field.getId());
+      }
+
+      double numericValue = decoded.get(field.getId()).getAsDouble();
+
+      double unscaled = (numericValue - field.getOffset()) / field.getResolution();
+      long rawValue = Math.round(unscaled);
+
+      validateRawValue(field, rawValue);
+
+      N2kBitCodec.insertBits(
+          payload,
+          field.getStartByte(),
+          field.getStartBit(),
+          field.getBytesToRead(),
+          field.getMask(),
+          rawValue
+      );
+    }
+
+    return payload;
+  }
+
+  private static int computePayloadLengthBytes(N2kCompiledMessage message, JsonObject decoded) {
+    int requiredBitExclusive = message.getMinimumLengthBytes() << 3;
+
+    for (N2kCompiledField field : message.getFields()) {
+      if (field.isReserved()) {
+        continue;
+      }
+      if (!decoded.has(field.getId())) {
+        continue;
+      }
+
+      int endBitExclusive = field.getBitOffset() + field.getBitLength();
+      if (endBitExclusive > requiredBitExclusive) {
+        requiredBitExclusive = endBitExclusive;
+      }
+    }
+
+    int requiredBytes = (requiredBitExclusive + 7) >>> 3;
+
+    if (message.getLengthType() == io.mapsmessaging.n2k.model.N2kMessageLengthType.FIXED) {
+      Integer fixedLengthBytes = message.getFixedLengthBytes();
+      if (fixedLengthBytes == null) {
+        throw new IllegalStateException("FIXED lengthType but fixedLengthBytes is null for PGN " + message.getPgn());
+      }
+
+      if (requiredBytes > fixedLengthBytes) {
+        throw new IllegalArgumentException(
+            "PGN " + message.getPgn() + " requires " + requiredBytes + " bytes based on provided fields, but fixed length is " +
+                fixedLengthBytes
+        );
+      }
+
+      return fixedLengthBytes;
+    }
+
+    return requiredBytes;
+  }
+
+  private static void validateRawValue(N2kCompiledField field, long rawValue) {
+    if (!field.isSigned()) {
+      if (rawValue < 0) {
+        throw new IllegalArgumentException("Unsigned field " + field.getId() + " cannot be negative");
+      }
+      long max = field.getMask();
+      if (rawValue > max) {
+        throw new IllegalArgumentException("Field " + field.getId() + " out of range: " + rawValue + " max=" + max);
+      }
+    }
+    else {
+      int bitLength = field.getBitLength();
+      if (bitLength > 0 && bitLength < 64) {
+        long min = -(1L << (bitLength - 1));
+        long max = (1L << (bitLength - 1)) - 1L;
+        if (rawValue < min || rawValue > max) {
+          throw new IllegalArgumentException(
+              "Signed field " + field.getId() + " out of range: " + rawValue + " allowed=" + min + ".." + max
+          );
+        }
+      }
+    }
+  }
+}
