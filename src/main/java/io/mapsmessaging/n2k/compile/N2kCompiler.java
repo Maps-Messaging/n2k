@@ -140,9 +140,7 @@ public class N2kCompiler {
           reserved
       );
 
-      if (!reserved) {
-        compiledFields.add(compiledField);
-      }
+      compiledFields.add(compiledField);
     }
 
     int minimumLengthBytes = computeMinimumLengthBytes(messageDefinition);
@@ -238,7 +236,7 @@ public class N2kCompiler {
     if (!stepsFits) {
       return offset;
     }
-
-    return min - (rawMin * resolution);
+    return offset;
+    //return min - (rawMin * resolution);
   }
 }

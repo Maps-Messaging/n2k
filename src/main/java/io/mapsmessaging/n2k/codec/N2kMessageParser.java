@@ -5,22 +5,20 @@ import io.mapsmessaging.n2k.compile.N2kCompiledField;
 import io.mapsmessaging.n2k.compile.N2kCompiledMessage;
 import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
 import io.mapsmessaging.n2k.model.N2kFieldType;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 public class N2kMessageParser {
 
+  @Getter
   private final N2kCompiledRegistry registry;
 
   public JsonObject decodeToJson(int pgn, byte[] payload) {
     N2kCompiledMessage message = registry.getRequiredMessage(pgn);
+    if(message == null) return null;
 
-    int requiredLengthBytes = message.getRequiredLengthBytesForDecode();
-    if (payload.length < requiredLengthBytes) {
-      throw new IllegalArgumentException(
-          "Payload too short for PGN " + pgn + ": have=" + payload.length + " required=" + requiredLengthBytes
-      );
-    }
+
 
     JsonObject decoded = new JsonObject();
     for (N2kCompiledField field : message.getFields()) {
@@ -77,7 +75,27 @@ public class N2kMessageParser {
     byte[] payload = new byte[payloadLengthBytes];
 
     for (N2kCompiledField field : message.getFields()) {
+
       if (field.isReserved()) {
+        int bitLength = field.getBitLength();
+        long rawValue;
+
+        if (bitLength >= 64) {
+          throw new IllegalStateException(
+              "Reserved field too large for 64-bit insert: " + field.getId() + " bitLength=" + bitLength
+          );
+        }
+
+        rawValue = (bitLength == 64) ? -1L : ((1L << bitLength) - 1L);
+
+        N2kBitCodec.insertBits(
+            payload,
+            field.getStartByte(),
+            field.getStartBit(),
+            field.getBytesToRead(),
+            field.getMask(),
+            rawValue
+        );
         continue;
       }
 
