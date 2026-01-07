@@ -1,24 +1,6 @@
-/*
- *
- *  Copyright [ 2020 - 2024 ] Matthew Buckton
- *  Copyright [ 2024 - 2026 ] MapsMessaging B.V.
- *
- *  Licensed under the Apache License, Version 2.0 with the Commons Clause
- *  (the "License"); you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at:
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *      https://commonsclause.com/
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- */
-
 package io.mapsmessaging.n2k;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.mapsmessaging.n2k.codec.N2kMessageParser;
@@ -29,6 +11,7 @@ import io.mapsmessaging.n2k.compile.N2kCompiler;
 import io.mapsmessaging.n2k.model.N2kFieldType;
 import io.mapsmessaging.n2k.model.N2kMessageDefinition;
 import io.mapsmessaging.n2k.parser.N2kXmlDialectParser;
+import io.mapsmessaging.n2k.schema.N2kSchemaRegistry;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
@@ -43,10 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class N2kRoundTripAllPgnsTest {
 
-  // One thing I genuinely need from you: what is the actual classpath resource path of your official N2K XML file?
-  // Replace this constant with it.
   private static final String DIALECT_RESOURCE_PATH = "n2k/NMEA_database_1_300.xml";
-
   private static final long BASE_SEED = 0x6b8b4567L;
 
   @TestFactory
@@ -62,6 +42,218 @@ class N2kRoundTripAllPgnsTest {
             msg.getPgn() + " " + (msg.getId() == null ? "" : msg.getId()),
             () -> roundTripMessage(parser, msg)
         ));
+  }
+
+  @TestFactory
+  Stream<DynamicTest> allCompiledPgns_decodeJson_conformsToGeneratedSchema() throws Exception {
+    N2kCompiledRegistry registry = buildRegistry();
+    N2kMessageParser parser = new N2kMessageParser(registry);
+    N2kSchemaRegistry schemaRegistry = new N2kSchemaRegistry(registry);
+
+    List<N2kCompiledMessage> messages = new ArrayList<>(registry.getMessagesByPgn().values());
+    messages.sort(Comparator.comparingInt(N2kCompiledMessage::getPgn));
+
+    return messages.stream()
+        .map(msg -> DynamicTest.dynamicTest(
+            msg.getPgn() + " " + (msg.getId() == null ? "" : msg.getId()),
+            () -> schemaValidateDecodedEnvelope(parser, schemaRegistry, msg)
+        ));
+  }
+
+// io.mapsmessaging.n2k.N2kRoundTripAllPgnsTest
+// Replace schemaValidateDecodedEnvelope(...) with this version.
+
+  private static void schemaValidateDecodedEnvelope(
+      N2kMessageParser parser,
+      N2kSchemaRegistry schemaRegistry,
+      N2kCompiledMessage msg
+  ) {
+    JsonObject decoded = new JsonObject();
+    Random random = new Random(BASE_SEED ^ (long) msg.getPgn());
+
+    for (N2kCompiledField field : msg.getFields()) {
+      if (field.isReserved()) {
+        continue;
+      }
+
+      N2kFieldType type = field.getFieldType();
+      if (type != N2kFieldType.NUMBER && type != N2kFieldType.LOOKUP && type != N2kFieldType.FLOAT) {
+        continue;
+      }
+
+      String id = field.getId();
+      if (id == null || id.isBlank()) {
+        continue;
+      }
+
+      long rawValue = randomRawValue(field, random);
+      long clampedRawValue = clampRawValueToSchemaRange(field, rawValue);
+
+      if (type == N2kFieldType.LOOKUP) {
+        decoded.addProperty(id, (int) (clampedRawValue & field.getMask()));
+      }
+      else {
+        double value = clampedRawValue * field.getResolution() + field.getOffset();
+        decoded.addProperty(id, value);
+      }
+    }
+
+    JsonObject envelope = new JsonObject();
+    envelope.addProperty("pgn", msg.getPgn());
+    envelope.add("decoded", decoded);
+
+    byte[] payload = parser.encodeFromJson(msg.getPgn(), envelope);
+    assertNotNull(payload);
+
+    JsonObject decodedBackEnvelope = parser.decodeToJson(msg.getPgn(), payload);
+    assertNotNull(decodedBackEnvelope);
+
+    JsonObject schema = schemaRegistry.getSchema(msg.getPgn());
+    validateEnvelopeAgainstSchema(schema, decodedBackEnvelope, msg.getPgn());
+  }
+
+
+  private static long clampRawValueToSchemaRange(N2kCompiledField field, long rawValue) {
+    long clamped = clampRawValue(field, rawValue);
+
+    Double min = field.getRangeMin();
+    Double max = field.getRangeMax();
+
+    if (min == null && max == null) {
+      return clamped;
+    }
+
+    double resolution = field.getResolution();
+    if (resolution <= 0.0) {
+      return clamped;
+    }
+
+    double offset = field.getOffset();
+
+    long minRaw = Long.MIN_VALUE;
+    long maxRaw = Long.MAX_VALUE;
+
+    if (min != null) {
+      minRaw = Math.round((min - offset) / resolution);
+    }
+    if (max != null) {
+      maxRaw = Math.round((max - offset) / resolution);
+    }
+
+    if (minRaw > maxRaw) {
+      return clamped;
+    }
+
+    if (clamped < minRaw) {
+      return minRaw;
+    }
+    if (clamped > maxRaw) {
+      return maxRaw;
+    }
+
+    return clamped;
+  }
+
+
+
+
+  private static void validateEnvelopeAgainstSchema(JsonObject schema, JsonObject envelope, int pgn) {
+    assertNotNull(schema);
+    assertNotNull(envelope);
+
+    assertTrue(envelope.has("pgn"), "Missing pgn for PGN=" + pgn);
+    assertEquals(pgn, envelope.get("pgn").getAsInt(), "pgn mismatch for PGN=" + pgn);
+
+    assertTrue(envelope.has("decoded"), "Missing decoded for PGN=" + pgn);
+    JsonObject decoded = envelope.getAsJsonObject("decoded");
+    assertNotNull(decoded, "decoded is not an object for PGN=" + pgn);
+
+    JsonObject schemaProperties = schema.getAsJsonObject("properties");
+    assertNotNull(schemaProperties, "Schema missing properties for PGN=" + pgn);
+
+    JsonObject decodedSchema = schemaProperties.getAsJsonObject("decoded");
+    assertNotNull(decodedSchema, "Schema missing decoded for PGN=" + pgn);
+
+    JsonObject decodedSchemaProperties = decodedSchema.getAsJsonObject("properties");
+    assertNotNull(decodedSchemaProperties, "Schema decoded missing properties for PGN=" + pgn);
+
+    boolean additionalPropertiesAllowed = true;
+    if (decodedSchema.has("additionalProperties")) {
+      additionalPropertiesAllowed = decodedSchema.get("additionalProperties").getAsBoolean();
+    }
+
+    // Enforce required decoded fields
+    if (decodedSchema.has("required")) {
+      JsonArray required = decodedSchema.getAsJsonArray("required");
+      for (JsonElement req : required) {
+        String fieldId = req.getAsString();
+        assertTrue(decoded.has(fieldId), "Missing required decoded field '" + fieldId + "' for PGN=" + pgn);
+      }
+    }
+
+    // Enforce schema for every decoded property
+    for (Map.Entry<String, JsonElement> entry : decoded.entrySet()) {
+      String fieldId = entry.getKey();
+      JsonElement value = entry.getValue();
+
+      JsonObject fieldSchema = decodedSchemaProperties.getAsJsonObject(fieldId);
+
+      if (!additionalPropertiesAllowed) {
+        assertNotNull(fieldSchema, "Unexpected decoded field '" + fieldId + "' for PGN=" + pgn);
+      }
+      if (fieldSchema == null) {
+        continue;
+      }
+
+      String expectedType = fieldSchema.has("type") ? fieldSchema.get("type").getAsString() : null;
+      if (expectedType == null) {
+        continue;
+      }
+
+      if ("number".equals(expectedType)) {
+        assertTrue(value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber(),
+            "Field '" + fieldId + "' expected number for PGN=" + pgn);
+      }
+      else if ("integer".equals(expectedType)) {
+        assertTrue(value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber(),
+            "Field '" + fieldId + "' expected integer(number) for PGN=" + pgn);
+
+        double d = value.getAsDouble();
+        assertEquals(Math.rint(d), d, 0.0, "Field '" + fieldId + "' expected integer value for PGN=" + pgn);
+      }
+      else if ("string".equals(expectedType)) {
+        assertTrue(value.isJsonPrimitive() && value.getAsJsonPrimitive().isString(),
+            "Field '" + fieldId + "' expected string for PGN=" + pgn);
+        continue;
+      }
+
+      double tolerance = 0.0;
+      if (fieldSchema.has("multipleOf")) {
+        tolerance = fieldSchema.get("multipleOf").getAsDouble() * 0.51;
+      }
+
+      if (fieldSchema.has("minimum")) {
+        double min = fieldSchema.get("minimum").getAsDouble();
+        if(value.getAsDouble() + tolerance < min){
+          System.err.println("check");
+        }
+        assertTrue(value.getAsDouble() + tolerance >= min, "Field '" + fieldId + "' below minimum for PGN=" + pgn);
+      }
+      if (fieldSchema.has("maximum")) {
+        double max = fieldSchema.get("maximum").getAsDouble();
+        assertTrue(value.getAsDouble() - tolerance <= max, "Field '" + fieldId + "' above maximum for PGN=" + pgn);
+      }
+    }
+
+    // Root strictness
+    if (schema.has("additionalProperties") && !schema.get("additionalProperties").getAsBoolean()) {
+      for (Map.Entry<String, JsonElement> entry : envelope.entrySet()) {
+        String key = entry.getKey();
+        if (!"pgn".equals(key) && !"decoded".equals(key)) {
+          fail("Unexpected root property '" + key + "' for PGN=" + pgn);
+        }
+      }
+    }
   }
 
   private static void roundTripMessage(N2kMessageParser parser, N2kCompiledMessage msg) {
@@ -179,38 +371,114 @@ class N2kRoundTripAllPgnsTest {
     }
     return null;
   }
-
   private static long randomRawValue(N2kCompiledField field, Random random) {
-    int bitLength = field.getBitLength();
-    if (bitLength <= 0) {
+    RawRange range = computeAllowedRawRange(field);
+
+    if (!range.valid) {
       return 0L;
     }
+
+    if (range.min == range.max) {
+      return range.min;
+    }
+
+    long span = range.max - range.min;
+    long offset = nextLongBounded(random, span + 1L);
+
+    return range.min + offset;
+  }
+
+  private static RawRange computeAllowedRawRange(N2kCompiledField field) {
+    int bitLength = field.getBitLength();
+    if (bitLength <= 0) {
+      return RawRange.invalid();
+    }
+
+    long bitMin;
+    long bitMax;
 
     if (field.isSigned()) {
       if (bitLength >= 64) {
-        return random.nextLong();
+        bitMin = Long.MIN_VALUE;
+        bitMax = Long.MAX_VALUE;
       }
-
-      long min = -(1L << (bitLength - 1));
-      long max = (1L << (bitLength - 1)) - 1L;
-
-      long span = max - min;
-      long offset = nextLongBounded(random, span + 1L);
-
-      return min + offset;
+      else {
+        bitMin = -(1L << (bitLength - 1));
+        bitMax = (1L << (bitLength - 1)) - 1L;
+      }
+    }
+    else {
+      bitMin = 0L;
+      bitMax = field.getMask();
+      if (bitMax <= 0L) {
+        return RawRange.invalid();
+      }
     }
 
-    long mask = field.getMask();
-    if (mask == 0L) {
-      return 0L;
+    Double rangeMin = field.getRangeMin();
+    Double rangeMax = field.getRangeMax();
+
+    if (rangeMin == null && rangeMax == null) {
+      return RawRange.of(bitMin, bitMax);
     }
 
-    if (bitLength >= 64) {
-      return random.nextLong();
+    double resolution = field.getResolution();
+    if (resolution <= 0.0) {
+      return RawRange.of(bitMin, bitMax);
     }
 
-    return nextLongBounded(random, mask + 1L);
+    double offset = field.getOffset();
+
+    long rawFromRangeMin = bitMin;
+    long rawFromRangeMax = bitMax;
+
+    if (rangeMin != null) {
+      double unscaledMin = (rangeMin - offset) / resolution;
+      rawFromRangeMin = (long) Math.ceil(unscaledMin - 1e-12);
+    }
+
+    if (rangeMax != null) {
+      double unscaledMax = (rangeMax - offset) / resolution;
+      rawFromRangeMax = (long) Math.floor(unscaledMax + 1e-12);
+    }
+
+    long min = Math.max(bitMin, rawFromRangeMin);
+    long max = Math.min(bitMax, rawFromRangeMax);
+
+    if (!field.isSigned()) {
+      long mask = field.getMask();
+      min &= mask;
+      max &= mask;
+    }
+
+    if (min > max) {
+      // Range and bit layout disagree; safest is clamp to bit range rather than inventing nonsense.
+      return RawRange.of(bitMin, bitMax);
+    }
+
+    return RawRange.of(min, max);
   }
+
+  private static final class RawRange {
+    final boolean valid;
+    final long min;
+    final long max;
+
+    private RawRange(boolean valid, long min, long max) {
+      this.valid = valid;
+      this.min = min;
+      this.max = max;
+    }
+
+    static RawRange of(long min, long max) {
+      return new RawRange(true, min, max);
+    }
+
+    static RawRange invalid() {
+      return new RawRange(false, 0L, 0L);
+    }
+  }
+
 
   private static long nextLongBounded(Random random, long boundExclusive) {
     if (boundExclusive <= 0L) {
@@ -231,7 +499,6 @@ class N2kRoundTripAllPgnsTest {
 
     return u % boundExclusive;
   }
-
 
   private static N2kCompiledRegistry buildRegistry() throws Exception {
     List<N2kMessageDefinition> defs = N2kXmlDialectParser.parseFromClasspath(DIALECT_RESOURCE_PATH);

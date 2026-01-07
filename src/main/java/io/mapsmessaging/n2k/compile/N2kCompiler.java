@@ -15,6 +15,8 @@ import java.util.Map;
 @UtilityClass
 public class N2kCompiler {
 
+  private static final double EPS = 1e-6;
+
   public static N2kCompiledRegistry compile(List<N2kMessageDefinition> messageDefinitions) {
     Map<Integer, N2kCompiledMessage> messagesByPgn = new HashMap<>(messageDefinitions.size());
 
@@ -103,6 +105,22 @@ public class N2kCompiler {
         mask = 0L;
       }
 
+      double resolution = fieldDefinition.getResolution();
+      double offset = fieldDefinition.getOffset();
+
+      Double rangeMin = fieldDefinition.getRangeMin();
+      Double rangeMax = fieldDefinition.getRangeMax();
+
+      double effectiveOffset = resolveEffectiveOffset(
+          fieldType,
+          fieldDefinition.isSigned(),
+          bitLength,
+          resolution,
+          offset,
+          rangeMin,
+          rangeMax
+      );
+
       N2kCompiledField compiledField = new N2kCompiledField(
           fieldDefinition.getId(),
           fieldDefinition.getName(),
@@ -113,12 +131,12 @@ public class N2kCompiler {
           bytesToRead,
           mask,
           fieldDefinition.isSigned(),
-          fieldDefinition.getResolution(),
-          fieldDefinition.getOffset(),
-          fieldDefinition.getRangeMin(),
-          fieldDefinition.getRangeMax(),
+          resolution,
+          effectiveOffset,
+          rangeMin,
+          rangeMax,
           fieldDefinition.getUnit(),
-          fieldDefinition.getFieldType(),
+          fieldType,
           reserved
       );
 
@@ -132,7 +150,9 @@ public class N2kCompiler {
     if (messageDefinition.getLengthType() == N2kMessageLengthType.FIXED) {
       Integer fixedLengthBytes = messageDefinition.getFixedLengthBytes();
       if (fixedLengthBytes == null) {
-        throw new IllegalArgumentException("FIXED lengthType but fixedLengthBytes is null for PGN " + messageDefinition.getPgn());
+        throw new IllegalArgumentException(
+            "FIXED lengthType but fixedLengthBytes is null for PGN " + messageDefinition.getPgn()
+        );
       }
       if (fixedLengthBytes < minimumLengthBytes) {
         throw new IllegalArgumentException(
@@ -151,5 +171,74 @@ public class N2kCompiler {
         minimumLengthBytes,
         List.copyOf(compiledFields)
     );
+  }
+
+  private static double resolveEffectiveOffset(
+      N2kFieldType fieldType,
+      boolean signed,
+      int bitLength,
+      double resolution,
+      double offset,
+      Double rangeMin,
+      Double rangeMax
+  ) {
+    if (fieldType != N2kFieldType.NUMBER && fieldType != N2kFieldType.FLOAT) {
+      return offset;
+    }
+
+    if (bitLength <= 0 || bitLength >= 64) {
+      return offset;
+    }
+
+    if (resolution == 0.0) {
+      return offset;
+    }
+
+    if (rangeMin == null || rangeMax == null) {
+      return offset;
+    }
+
+    if (offset != 0.0) {
+      return offset;
+    }
+
+    double min = rangeMin.doubleValue();
+    double max = rangeMax.doubleValue();
+
+    if (min == 0.0) {
+      return offset;
+    }
+
+    long rawMin;
+    long rawMax;
+
+    if (signed) {
+      rawMin = -(1L << (bitLength - 1));
+      rawMax = (1L << (bitLength - 1)) - 1L;
+    }
+    else {
+      rawMin = 0L;
+      rawMax = (1L << bitLength) - 1L;
+    }
+
+    double width = max - min;
+    if (width < 0.0) {
+      return offset;
+    }
+
+    double steps = width / resolution;
+
+    boolean stepsIsIntegral = Math.abs(steps - Math.rint(steps)) < EPS;
+    if (!stepsIsIntegral) {
+      return offset;
+    }
+
+    double rawCapacity = (double) (rawMax - rawMin);
+    boolean stepsFits = steps >= 0.0 && steps <= rawCapacity + EPS;
+    if (!stepsFits) {
+      return offset;
+    }
+
+    return min - (rawMin * resolution);
   }
 }

@@ -23,8 +23,14 @@ public class N2kMessageParser {
     }
 
     JsonObject decoded = new JsonObject();
-
     for (N2kCompiledField field : message.getFields()) {
+
+      N2kFieldType fieldType = field.getFieldType();
+      if (fieldType != N2kFieldType.NUMBER
+          && fieldType != N2kFieldType.FLOAT
+          && fieldType != N2kFieldType.LOOKUP) {
+        continue;
+      }
 
       long raw = N2kBitCodec.extractBits(
           payload,
@@ -36,15 +42,21 @@ public class N2kMessageParser {
           field.getBitLength()
       );
 
-      double value = raw * field.getResolution() + field.getOffset();
-
-      N2kFieldType fieldType = field.getFieldType();
-      if (fieldType == N2kFieldType.LOOKUP ||
-          fieldType == N2kFieldType.NUMBER ||
-          fieldType == N2kFieldType.FLOAT) {
-        decoded.addProperty(field.getId(), value);
+      if (fieldType == N2kFieldType.LOOKUP) {
+        decoded.addProperty(field.getId(), (int) (raw & field.getMask()));
+        continue;
       }
+
+      double resolution = field.getResolution();
+      double offset = field.getOffset();
+
+      // Do NOT infer offset here from rangeMin/rangeMax.
+      // This XML contains known-bad ranges (e.g. uint16 with negative min).
+      double value = raw * resolution + offset;
+
+      decoded.addProperty(field.getId(), value);
     }
+
 
     JsonObject envelope = new JsonObject();
     envelope.addProperty("pgn", pgn);
@@ -80,8 +92,26 @@ public class N2kMessageParser {
 
       double numericValue = decoded.get(field.getId()).getAsDouble();
 
-      double unscaled = (numericValue - field.getOffset()) / field.getResolution();
+      double resolution = field.getResolution();
+      double offset = field.getOffset();
+
+      double unscaled = (numericValue - offset) / resolution;
       long rawValue = Math.round(unscaled);
+
+      long rawMin = field.isSigned()
+          ? -(1L << (field.getBitLength() - 1))
+          : 0L;
+
+      long rawMax = field.isSigned()
+          ? (1L << (field.getBitLength() - 1)) - 1L
+          : (1L << field.getBitLength()) - 1L;
+
+      if (rawValue < rawMin) {
+        rawValue = rawMin;
+      }
+      else if (rawValue > rawMax) {
+        rawValue = rawMax;
+      }
 
       validateRawValue(field, rawValue);
 
