@@ -3679,6 +3679,7 @@
        <BitLength>8</BitLength>
        <BitOffset>48</BitOffset>
        <BitStart>0</BitStart>
+       <Offset>1</Offset>
        <Resolution>0.002</Resolution>
        <Signed>false</Signed>
        <RangeMin>1</RangeMin>
