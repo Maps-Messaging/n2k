@@ -1,3 +1,22 @@
+/*
+ *
+ *  Copyright [ 2020 - 2024 ] Matthew Buckton
+ *  Copyright [ 2024 - 2026 ] MapsMessaging B.V.
+ *
+ *  Licensed under the Apache License, Version 2.0 with the Commons Clause
+ *  (the "License"); you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at:
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://commonsclause.com/
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+
 package io.mapsmessaging.n2k.compile;
 
 import io.mapsmessaging.n2k.model.N2kFieldDefinition;
@@ -15,8 +34,6 @@ import java.util.Map;
 @UtilityClass
 public class N2kCompiler {
 
-  private static final double EPS = 1e-6;
-
   public static N2kCompiledRegistry compile(List<N2kMessageDefinition> messageDefinitions) {
     Map<Integer, N2kCompiledMessage> messagesByPgn = new HashMap<>(messageDefinitions.size());
 
@@ -29,19 +46,10 @@ public class N2kCompiler {
   }
 
   private static boolean isCompileTimeFixedField(N2kFieldDefinition fieldDefinition) {
-    N2kFieldType fieldType = fieldDefinition.getFieldType();
-
-    if (fieldDefinition.getBitOffset() == null || fieldDefinition.getBitLength() == null) {
-      return false;
-    }
-
-    if (fieldType == N2kFieldType.STRING_FIX ||
-        fieldType == N2kFieldType.STRING_LAU ||
-        fieldType == N2kFieldType.REPEAT_MARKER) {
-      return false;
-    }
-
-    return true;
+    return fieldDefinition.getBitOffset() != null
+        && fieldDefinition.getBitLength() != null
+        && fieldDefinition.getFieldType() != N2kFieldType.STRING_LAU
+        && fieldDefinition.getFieldType() != N2kFieldType.REPEAT_MARKER;
   }
 
   private static int computeMinimumLengthBytes(N2kMessageDefinition messageDefinition) {
@@ -111,29 +119,40 @@ public class N2kCompiler {
       Double rangeMin = fieldDefinition.getRangeMin();
       Double rangeMax = fieldDefinition.getRangeMax();
 
+      long rawMin;
+      long rawMax;
 
-      N2kCompiledField compiledField = new N2kCompiledField(
-          fieldDefinition.getId(),
-          fieldDefinition.getName(),
-          bitOffset,
-          bitLength,
-          startByte,
-          startBit,
-          bytesToRead,
-          mask,
-          fieldDefinition.isSigned(),
-          resolution,
-          offset,
-          rangeMin,
-          rangeMax,
-          fieldDefinition.getUnit(),
-          fieldType,
-          reserved
-      );
-
-      if (!reserved) {
-        compiledFields.add(compiledField);
+      if (fieldDefinition.isSigned()) {
+        rawMin = -(1L << (bitLength - 1));
+        rawMax =  (1L << (bitLength - 1)) - 1L;
       }
+      else {
+        rawMin = 0L;
+        rawMax = (bitLength == 64) ? -1L : (1L << bitLength) - 1L;
+      }
+
+      N2kCompiledField compiledField =
+          N2kCompiledField.builder()
+              .id(fieldDefinition.getId())
+              .name(fieldDefinition.getName())
+              .bitOffset(bitOffset)
+              .bitLength(bitLength)
+              .startByte(startByte)
+              .startBit(startBit)
+              .bytesToRead(bytesToRead)
+              .mask(mask)
+              .signed(fieldDefinition.isSigned())
+              .resolution(resolution)
+              .offset(offset)
+              .rangeMin(rangeMin)
+              .rangeMax(rangeMax)
+              .unit(fieldDefinition.getUnit())
+              .fieldType(fieldType)
+              .reserved(reserved)
+              .rawMin(rawMin)
+              .rawMax(rawMax)
+              .build();
+      compiledFields.add(compiledField);
     }
 
     int minimumLengthBytes = computeMinimumLengthBytes(messageDefinition);
@@ -153,14 +172,16 @@ public class N2kCompiler {
       }
     }
 
-    return new N2kCompiledMessage(
-        messageDefinition.getPgn(),
-        messageDefinition.getId(),
-        messageDefinition.getDescription(),
-        messageDefinition.getLengthType(),
-        messageDefinition.getFixedLengthBytes(),
-        minimumLengthBytes,
-        List.copyOf(compiledFields)
-    );
+    return N2kCompiledMessage.builder()
+        .pgn(messageDefinition.getPgn())
+        .id(messageDefinition.getId())
+        .description(messageDefinition.getDescription())
+        .lengthType(messageDefinition.getLengthType())
+        .fixedLengthBytes(messageDefinition.getFixedLengthBytes())
+        .minimumLengthBytes(minimumLengthBytes)
+        .fields(compiledFields)
+        .definitions(messageDefinition.getFields())
+        .build();
+
   }
 }

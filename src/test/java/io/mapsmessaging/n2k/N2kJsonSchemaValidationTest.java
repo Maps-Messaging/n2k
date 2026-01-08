@@ -124,6 +124,9 @@ class N2kJsonSchemaValidationTest extends BaseTest{
       JsonArray required = decodedSchema.getAsJsonArray("required");
       for (JsonElement req : required) {
         String fieldId = req.getAsString();
+        if(!decoded.has(fieldId)){
+
+        }
         assertTrue(decoded.has(fieldId), "Missing required decoded field '" + fieldId + "' for PGN=" + pgn);
       }
     }

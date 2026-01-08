@@ -17,9 +17,18 @@
  *  limitations under the License.
  */
 
-package io.mapsmessaging.n2k.model;
+package io.mapsmessaging.n2k.codec;
 
-public enum N2kMessageLengthType {
-  FIXED,
-  VARIABLE
+import com.google.gson.JsonObject;
+import io.mapsmessaging.n2k.compile.N2kCompiledField;
+
+public interface Processor {
+
+  default void pack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
+    // no-op
+  }
+
+  default void unpack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
+    // no-op
+  }
 }

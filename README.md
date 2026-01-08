@@ -1,89 +1,127 @@
-# MAVLink Payload Codec (Java)
+# NMEA 2000 (N2K) Payload Codec (Java)
 
-This repository provides a lightweight, schema-driven MAVLink **payload**
-encoder and decoder for Java.
+This repository provides a lightweight, schema-driven **NMEA 2000 (N2K) payload**
+decoder for Java.
 
-It parses MAVLink XML dialects (including `{@code <include>}` handling),
-compiles message definitions, and provides fast, thread-safe encoding and
-decoding of MAVLink message **payloads only**.
+It parses N2K PGN definitions derived from **public CANboat XML metadata**,
+compiles message definitions, and provides fast, deterministic decoding of
+N2K **payloads only**.
 
 This library is intentionally limited in scope and designed to be composed
-into larger MAVLink-capable systems.
+into larger N2K-capable systems.
 
 ---
 
 ## Scope (Read This First)
 
-This library operates **only on MAVLink message payloads**.
+This library operates **only on NMEA 2000 message payloads**.
 
 It **does**:
 
-- Parse MAVLink XML dialects
-- Compile message definitions into an immutable registry
-- Encode Java field maps into MAVLink payload bytes
-- Decode MAVLink payload bytes into typed field maps
-- Correctly handle MAVLink field ordering, arrays, enums, and extensions
-- Creates JsonSchemas to match the fields that it parses to and from
+- Parse N2K PGN definitions from CANboat-style XML
+- Compile PGN definitions into an immutable registry
+- Decode N2K payload bytes into typed field maps
+- Correctly handle bit-level field packing
+- Handle fixed-length and variable-length fields
+- Decode repeating fields where defined
+- Produce JSON-compatible representations of decoded payloads
 
 It **does not**:
 
-- Manage system IDs, component IDs, or sequence numbers
-- Implement any transport (UART, UDP, TCP, etc.)
+- Handle CAN transport, arbitration, or framing
+- Handle fast-packet reassembly
+- Manage source addresses or device instances
+- Implement PGN transmission or encoding
+- Provide coverage for proprietary PGNs
 
-Frame parsing, CRC handling, and framing are provided by the framework layer
-built on top of this codec.
+Transport handling and CAN frame management are expected to be provided by
+the layer above this codec.
 
-This library is designed to sit **under** a framing and transport layer.
+This library is designed to sit **under** a CAN / N2K transport layer.
+
+---
+
+## ⚠️ Important Limitations
+
+### Proprietary PGNs
+
+NMEA 2000 explicitly allows **manufacturer-specific (proprietary) PGNs**.
+
+This library:
+
+- **Only includes public PGNs** defined in CANboat metadata
+- **Does not** include proprietary PGNs
+- **Does not** attempt to guess or reverse-engineer private payload layouts
+
+If you need proprietary PGNs, you must supply your own definitions or
+handle them separately.
+
+---
+
+### XML Inconsistencies
+
+The CANboat XML metadata is not fully consistent.
+
+Known issues include:
+
+- Conflicting or ambiguous bit offsets
+- Inconsistent field lengths across revisions
+- Fields marked as signed/unsigned incorrectly
+- Runtime-sized fields without sufficient metadata
+- PGNs whose documented layouts do not match observed payloads
+
+As a result:
+
+- Some PGNs decode correctly
+- Some PGNs decode partially
+- Some PGNs cannot be decoded reliably without special handling
+
+These issues originate in the source metadata, not the decoder logic.
+
+---
+
+### 🚧 Production Readiness
+
+**This library is not yet production-ready.**
+
+It is currently suitable for:
+
+- Research and exploration
+- Tooling and inspection
+- Test pipelines
+- Decoder validation against real-world logs
+
+It is **not yet suitable** for:
+
+- Safety-critical systems
+- Certified marine instrumentation
+- Assumed-lossless decoding across all PGNs
+
+Expect ongoing refinement as metadata issues are identified and resolved.
 
 ---
 
 ## Features
 
-- MAVLink XML dialect parsing with `{@code <include>}` support
-- Canonical dialect compilation (e.g. `common.xml`)
+- CANboat XML PGN parsing
 - Immutable, thread-safe compiled registries
-- Correct MAVLink field ordering and packing rules
-- Extension field handling (present vs omitted)
-- Array fields and `char[]` handling
-- Enum and bitmask enum resolution
-- Safe failure on invalid or truncated payloads
+- Bit-accurate field extraction
+- Variable-length and repeating field handling
+- Graceful handling of missing or undefined fields
 - No shared mutable state at runtime
 
 ---
 
 ## Getting Started
 
-### Load the built-in `common` dialect
+### Build the registry
 
 ```java
-MavlinkMessageFormatLoader loader =
-    MavlinkMessageFormatLoader.getInstance();
-
-MavlinkCodec codec =
-    loader.getDialectOrThrow("common");
+N2kCompiledRegistry registry =
+    N2kCompiler.compile(xmlInputStream);
 ```
 
-The built-in `common` dialect is loaded eagerly and is always available.
-
----
-
-## Encoding a Payload
-
-Example: `SYS_STATUS` (message id `1`)
-
-```java
-Map<String, Object> values = Map.of(
-    "onboard_control_sensors_present", 1,
-    "onboard_control_sensors_enabled", 1,
-    "onboard_control_sensors_health", 1,
-    "load", 250,
-    "voltage_battery", 12000,
-    "current_battery", 100,
-    "battery_remaining", 90
-);
-
-byte[] payload = codec.encodePayload(1, values);
-```
+The registry is immutable and safe to cache globally.
 
 ---
 
@@ -91,67 +129,51 @@ byte[] payload = codec.encodePayload(1, values);
 
 ```java
 Map<String, Object> decoded =
-    codec.parsePayload(1, payload);
-
-int load = (int) decoded.get("load");
+    registry.parsePayload(pgn, payloadBytes);
 ```
 
-Field values are returned using standard Java types based on the MAVLink
-message definition.
+Decoded values are returned using standard Java types based on the PGN
+definition.
 
----
-
-## Loading Custom Dialects
-
-You can load MAVLink dialects from any `InputStream`:
-
-```java
-try (InputStream xml = Files.newInputStream(Path.of("custom.xml"))) {
-    MavlinkCodec custom =
-        loader.loadDialect("custom", xml, includeResolver);
-}
-```
-
-- Dialects are compiled once
-- Compiled codecs are cached by name
-- Subsequent lookups are lock-free
+Fields that cannot be decoded due to metadata ambiguity may be omitted or
+returned as raw values.
 
 ---
 
 ## Thread Safety
 
-- `MavlinkCodec` is immutable
-- `MavlinkMessageRegistry` is immutable
-- Encoders and decoders are stateless
+- Compiled registries are immutable
+- Decoders are stateless
+- No shared mutable runtime state
 
-A single codec instance may be safely:
+A single registry instance may be safely:
 
 - Shared across threads
 - Cached globally
-- Used in high-throughput systems
+- Used in high-throughput decoding pipelines
 
 ---
 
 ## Error Handling
 
-All parsing and encoding errors are reported explicitly:
+All decoding errors are reported explicitly:
 
-- Unknown message IDs → `IOException`
-- Invalid field types → `IOException`
-- Invalid enum values → `IOException`
+- Unknown PGNs → `IOException`
+- Invalid payload lengths → `IOException`
+- Bit-range violations → `IOException`
 - Truncated or malformed payloads → `IOException`
 
-No unchecked exceptions escape payload encode/decode paths.
+No unchecked exceptions escape decode paths.
 
 ---
 
 ## Design Philosophy
 
 - Payloads only, no transport assumptions
-- Compile once, run fast
+- Metadata-driven decoding
 - Immutability over defensive copying
-- Explicit errors over silent failure
-- Practical MAVLink usage, not theoretical completeness
+- Explicit errors over silent corruption
+- Real-world N2K behaviour, not idealised specs
 
 ---
 
@@ -159,13 +181,14 @@ No unchecked exceptions escape payload encode/decode paths.
 
 This library is intended for:
 
-- Protocol bridges
-- Schema-driven message systems
+- N2K log analysis tools
 - Telemetry ingestion pipelines
-- MAVLink-aware tooling that does not want transport coupling
+- Protocol bridges
+- Developers exploring N2K payload structures
 
-If you want a full MAVLink stack, use something else.  
-If you want a clean, deterministic payload codec, this is it.
+If you need full NMEA 2000 stack support, use something else.  
+If you want a clear, inspectable payload decoder built on public metadata,
+this is it.
 
 ---
 
