@@ -118,6 +118,29 @@ class N2kRoundTripCanboatLogTest {
 
     assertTrue(processed > 0, "No rows processed. lines=" + totalLines);
     System.err.println("Parsed and processed "+processed+" rows with "+unknown.size()+" of unknown PGN");
+    for(Map.Entry<Integer, List<byte[]>> entry: unknown.entrySet()){
+      System.err.println("pgn="+entry.getKey());
+      int end = Math.min(10, entry.getValue().size());
+      for(int x=0;x<end;x++){
+        System.err.println("\t"+dump(entry.getValue().get(x)));
+      }
+    }
+  }
+
+  private String dump(byte[] line){
+    StringBuilder sb = new StringBuilder();
+    for(byte b:line){
+      String t = Long.toHexString(b&0xff);
+      if(t.length()<2){
+        sb.append("0x0");
+      }
+      else{
+        sb.append("0x");
+      }
+      sb.append(t).append(" ");
+    }
+
+    return sb.toString();
   }
 
   private static CanboatRow parseCanboatCsvRow(String line) {
