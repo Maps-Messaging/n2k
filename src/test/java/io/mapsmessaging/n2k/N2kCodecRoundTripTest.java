@@ -35,8 +35,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 
 class N2kCodecRoundTripTest {
-  private static volatile N2kCompiledRegistry registry;
-
   @Test
   void loadsDialectFromClasspath() throws Exception {
     N2kCompiledRegistry registry = buildRegistry();
@@ -104,15 +102,6 @@ class N2kCodecRoundTripTest {
 
 
   private static N2kCompiledRegistry buildRegistry() throws Exception {
-    if (registry == null) {
-      synchronized (N2kCodecRoundTripTest.class) {
-        if (registry == null) {
-          List<N2kMessageDefinition> messageDefinitions =
-              N2kXmlDialectParser.parseFromClasspath("n2k/NMEA_database_1_300.xml");
-          registry = N2kCompiler.compile(messageDefinitions);
-        }
-      }
-    }
-    return registry;
+    return N2kParserFactory.getN2kParser();
   }
 }

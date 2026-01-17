@@ -39,14 +39,16 @@ import java.util.List;
 @UtilityClass
 public class N2kXmlDialectParser {
 
+  public static List<N2kMessageDefinition> parseFromClasspath() throws Exception {
+    return parseFromClasspath("n2k/NMEA_database_1_300.xml");
+  }
+
   public static List<N2kMessageDefinition> parseFromClasspath(String resourcePath) throws Exception {
     String normalizedPath = normalizeResourcePath(resourcePath);
-
     ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
     if (classLoader == null) {
       classLoader = N2kXmlDialectParser.class.getClassLoader();
     }
-
     try (InputStream inputStream = classLoader.getResourceAsStream(normalizedPath)) {
       if (inputStream == null) {
         throw new IllegalArgumentException("N2K XML resource not found on classpath: " + normalizedPath);
