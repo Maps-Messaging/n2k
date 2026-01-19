@@ -370,6 +370,14 @@
             <version>2.13.2</version>
         </dependency>
 
+        <!-- Maven -->
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>5.18.1</version>
+        </dependency>
+
+
         <!-- Junit5 -->
         <dependency>
             <artifactId>junit-jupiter-engine</artifactId>
