@@ -19,16 +19,14 @@
 
 package io.mapsmessaging.n2k.can;
 
-import com.sun.jna.Library;
 import com.sun.jna.Native;
-import com.sun.jna.Pointer;
-import com.sun.jna.Structure;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.List;
+
+import static io.mapsmessaging.n2k.can.IfReq.IFNAMSIZ;
 
 public final class SocketCanReader implements Closeable {
 
@@ -41,7 +39,7 @@ public final class SocketCanReader implements Closeable {
 
   // ioctl() constants
   private static final int SIOCGIFINDEX = 0x8933;
-  private static final int IFNAMSIZ = 16;
+
 
   private final int socketFileDescriptor;
 
@@ -152,50 +150,4 @@ public final class SocketCanReader implements Closeable {
     return ifRequest.interfaceIndex;
   }
 
-  public record CanFrame(int canIdentifier, int dataLengthCode, byte[] data) {}
-
-  private interface LibC extends Library {
-    int socket(int domain, int type, int protocol);
-    int bind(int socketFileDescriptor, Structure address, int addressLength);
-    int ioctl(int fileDescriptor, int request, Pointer argumentPointer);
-    int read(int fileDescriptor, Pointer buffer, int count);
-    int write(int fileDescriptor, Pointer buffer, int count);
-    int close(int fileDescriptor);
-  }
-
-  public static final class SockAddrCan extends Structure {
-    public short canFamily;
-    public int canInterfaceIndex;
-    public byte[] address = new byte[8];
-
-    @Override
-    protected List<String> getFieldOrder() {
-      return List.of("canFamily", "canInterfaceIndex", "address");
-    }
-  }
-
-  public static final class NativeCanFrame extends Structure {
-    public int canIdentifier;
-    public byte dataLengthCode;
-    public byte pad;
-    public byte reserved0;
-    public byte reserved1;
-    public byte[] data = new byte[8];
-
-    @Override
-    protected List<String> getFieldOrder() {
-      return List.of("canIdentifier", "dataLengthCode", "pad", "reserved0", "reserved1", "data");
-    }
-  }
-
-  public static final class IfReq extends Structure {
-    public byte[] interfaceName = new byte[IFNAMSIZ];
-    public int interfaceIndex;
-    public byte[] padding = new byte[20];
-
-    @Override
-    protected List<String> getFieldOrder() {
-      return List.of("interfaceName", "interfaceIndex", "padding");
-    }
-  }
 }
