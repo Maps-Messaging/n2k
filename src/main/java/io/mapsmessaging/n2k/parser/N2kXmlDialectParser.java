@@ -1,4 +1,5 @@
 /*
+ *
  *  Copyright [ 2020 - 2024 ] Matthew Buckton
  *  Copyright [ 2024 - 2026 ] MapsMessaging B.V.
  *
@@ -9,12 +10,11 @@
  *      http://www.apache.org/licenses/LICENSE-2.0
  *      https://commonsclause.com/
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
  */
 
 package io.mapsmessaging.n2k.parser;
@@ -23,18 +23,17 @@ import io.mapsmessaging.n2k.model.N2kFieldDefinition;
 import io.mapsmessaging.n2k.model.N2kFieldType;
 import io.mapsmessaging.n2k.model.N2kMessageDefinition;
 import io.mapsmessaging.n2k.model.N2kMessageLengthType;
-import lombok.experimental.UtilityClass;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import javax.xml.parsers.DocumentBuilderFactory;
+import lombok.experimental.UtilityClass;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 @UtilityClass
 public class N2kXmlDialectParser {

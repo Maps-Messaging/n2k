@@ -1,4 +1,5 @@
 /*
+ *
  *  Copyright [ 2020 - 2024 ] Matthew Buckton
  *  Copyright [ 2024 - 2026 ] MapsMessaging B.V.
  *
@@ -9,12 +10,11 @@
  *      http://www.apache.org/licenses/LICENSE-2.0
  *      https://commonsclause.com/
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
  */
 
 package io.mapsmessaging.n2k.codec;
@@ -24,10 +24,9 @@ import io.mapsmessaging.n2k.compile.N2kCompiledField;
 import io.mapsmessaging.n2k.compile.N2kCompiledMessage;
 import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
 import io.mapsmessaging.n2k.model.N2kFieldType;
+import java.util.Arrays;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-
-import java.util.Arrays;
 
 @RequiredArgsConstructor
 public class N2kMessageParser {
