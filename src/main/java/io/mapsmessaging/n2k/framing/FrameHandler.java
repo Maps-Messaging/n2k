@@ -22,11 +22,13 @@ package io.mapsmessaging.n2k.framing;
 
 import com.google.gson.JsonObject;
 import io.mapsmessaging.n2k.codec.N2kMessageParser;
+import io.mapsmessaging.n2k.compile.N2kCompiledMessage;
 import io.mapsmessaging.n2k.framing.assemblers.FastPacketAssembler;
 import io.mapsmessaging.n2k.framing.message.KnownMessage;
 import io.mapsmessaging.n2k.framing.message.Message;
 import io.mapsmessaging.n2k.framing.message.UnknownMessage;
 import io.mapsmessaging.n2k.framing.message.UnknownReason;
+import io.mapsmessaging.n2k.model.N2kMessageLengthType;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -142,8 +144,16 @@ public class FrameHandler {
     int firstByte = frameData[0] & 0xFF;
     int frameIndex = firstByte & 0x1F;
     int sequenceId = (firstByte >> 5) & 0x07;
-
     boolean looksLikeFastPacketStart = frameIndex == 0 && frameData.length >= 2 && ((frameData[1] & 0xFF) > 8);
+    if (looksLikeFastPacketStart) {
+      N2kCompiledMessage compiled = payloadParser.getRegistry().getRequiredMessage(parsedCanId.getPgn());
+      if (compiled != null) {
+        if (compiled.getLengthType() == N2kMessageLengthType.FIXED && compiled.getFixedLengthBytes() <= 8) {
+          looksLikeFastPacketStart = false;
+        }
+      }
+    }
+
     boolean hasInProgress = fastPacketAssembler.hasInProgress(parsedCanId, sequenceId);
 
     if (looksLikeFastPacketStart || hasInProgress) {

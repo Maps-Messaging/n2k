@@ -19,6 +19,8 @@
 
 package io.mapsmessaging.n2k;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.google.gson.JsonObject;
 import io.mapsmessaging.n2k.codec.N2kMessageParser;
 import io.mapsmessaging.n2k.compile.N2kCompiledField;
@@ -29,15 +31,12 @@ import io.mapsmessaging.n2k.model.N2kFieldDefinition;
 import io.mapsmessaging.n2k.model.N2kFieldType;
 import io.mapsmessaging.n2k.model.N2kMessageDefinition;
 import io.mapsmessaging.n2k.parser.N2kXmlDialectParser;
-import org.junit.jupiter.api.Test;
-
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 class N2kRoundTripCanboatLogTest {
 

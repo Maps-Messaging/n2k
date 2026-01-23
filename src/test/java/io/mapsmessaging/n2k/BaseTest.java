@@ -25,7 +25,6 @@ import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
 import io.mapsmessaging.n2k.compile.N2kCompiler;
 import io.mapsmessaging.n2k.model.N2kMessageDefinition;
 import io.mapsmessaging.n2k.parser.N2kXmlDialectParser;
-
 import java.util.List;
 import java.util.Random;
 

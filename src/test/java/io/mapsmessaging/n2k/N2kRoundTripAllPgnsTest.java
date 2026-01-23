@@ -19,29 +19,23 @@
 
 package io.mapsmessaging.n2k;
 
-import com.google.gson.JsonArray;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.mapsmessaging.n2k.codec.N2kMessageParser;
 import io.mapsmessaging.n2k.compile.N2kCompiledField;
 import io.mapsmessaging.n2k.compile.N2kCompiledMessage;
 import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
-import io.mapsmessaging.n2k.compile.N2kCompiler;
 import io.mapsmessaging.n2k.model.N2kFieldType;
-import io.mapsmessaging.n2k.model.N2kMessageDefinition;
-import io.mapsmessaging.n2k.parser.N2kXmlDialectParser;
-import io.mapsmessaging.n2k.schema.N2kSchemaRegistry;
-import org.junit.jupiter.api.DynamicTest;
-import org.junit.jupiter.api.TestFactory;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
 
 class N2kRoundTripAllPgnsTest extends BaseTest{
 

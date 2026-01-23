@@ -19,6 +19,11 @@
 
 package io.mapsmessaging.n2k;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -26,21 +31,12 @@ import io.mapsmessaging.n2k.codec.N2kMessageParser;
 import io.mapsmessaging.n2k.compile.N2kCompiledField;
 import io.mapsmessaging.n2k.compile.N2kCompiledMessage;
 import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
-import io.mapsmessaging.n2k.compile.N2kCompiler;
 import io.mapsmessaging.n2k.model.N2kFieldType;
-import io.mapsmessaging.n2k.model.N2kMessageDefinition;
-import io.mapsmessaging.n2k.parser.N2kXmlDialectParser;
 import io.mapsmessaging.n2k.schema.N2kSchemaRegistry;
-import org.junit.jupiter.api.DynamicTest;
-import org.junit.jupiter.api.TestFactory;
-
 import java.util.*;
 import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
 
 class N2kJsonSchemaValidationTest extends BaseTest{
 

@@ -19,17 +19,13 @@
 
 package io.mapsmessaging.n2k;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.google.gson.JsonObject;
 import io.mapsmessaging.n2k.codec.N2kMessageParser;
 import io.mapsmessaging.n2k.compile.N2kCompiledRegistry;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-
 
 class N2kCodecRoundTripTest {
   @Test
