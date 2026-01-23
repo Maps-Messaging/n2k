@@ -17,8 +17,10 @@
  *  limitations under the License.
  */
 
-package io.mapsmessaging.n2k.framing;
+package io.mapsmessaging.n2k.framing.assemblers;
 
+
+import io.mapsmessaging.n2k.framing.CanId;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,14 +29,14 @@ import java.util.Objects;
 
 public class FastPacketAssembler {
 
-  private final Map<Key, Assembly> inProgress;
+  private final Map<FastPacketKey, FastPacketAssembly> inProgress;
 
   public FastPacketAssembler() {
     this.inProgress = new HashMap<>();
   }
 
   public boolean hasInProgress(CanId canId, int sequenceId) {
-    Key key = Key.from(canId, sequenceId);
+    FastPacketKey key = FastPacketKey.from(canId, sequenceId);
     return inProgress.containsKey(key);
   }
 
@@ -51,7 +53,7 @@ public class FastPacketAssembler {
     Objects.requireNonNull(canId, "canId");
     Objects.requireNonNull(frameData, "frameData");
 
-    Key key = Key.from(canId, sequenceId);
+    FastPacketKey key = FastPacketKey.from(canId, sequenceId);
 
     if (frameIndex == 0) {
       if (frameData.length < 2) {
@@ -65,7 +67,7 @@ public class FastPacketAssembler {
         return null;
       }
 
-      Assembly assembly = new Assembly(totalLength);
+      FastPacketAssembly assembly = new FastPacketAssembly(totalLength);
       inProgress.put(key, assembly);
 
       // Frame 0 contributes 6 bytes starting at index 2
@@ -82,13 +84,12 @@ public class FastPacketAssembler {
       return null;
     }
 
-    Assembly assembly = inProgress.get(key);
+    FastPacketAssembly assembly = inProgress.get(key);
     if (assembly == null) {
       // We missed the start frame, so we can't reassemble this message.
       return null;
     }
 
-    // Subsequent frames contribute 7 bytes starting at index 1
     int bytesFromFrame = Math.min(7, frameData.length - 1);
     if (bytesFromFrame > 0) {
       assembly.append(frameData, 1, bytesFromFrame);
@@ -102,21 +103,26 @@ public class FastPacketAssembler {
     return null;
   }
 
-  private static final class Key {
+  private static final class FastPacketKey {
     private final int pgn;
     private final int source;
     private final int destination;
     private final int sequenceId;
 
-    private Key(int pgn, int source, int destination, int sequenceId) {
+    private FastPacketKey(int pgn, int source, int destination, int sequenceId) {
       this.pgn = pgn;
       this.source = source;
       this.destination = destination;
       this.sequenceId = sequenceId;
     }
 
-    private static Key from(CanId canId, int sequenceId) {
-      return new Key(canId.getPgn(), canId.getSourceAddress(), canId.getDestinationAddress(), sequenceId & 0x07);
+    private static FastPacketKey from(CanId canId, int sequenceId) {
+      return new FastPacketKey(
+          canId.getPgn(),
+          canId.getSourceAddress(),
+          canId.getDestinationAddress(),
+          sequenceId & 0x07
+      );
     }
 
     @Override
@@ -124,7 +130,7 @@ public class FastPacketAssembler {
       if (this == o) {
         return true;
       }
-      if (!(o instanceof Key other)) {
+      if (!(o instanceof FastPacketKey other)) {
         return false;
       }
       return pgn == other.pgn
@@ -143,11 +149,11 @@ public class FastPacketAssembler {
     }
   }
 
-  private static final class Assembly {
+  private static final class FastPacketAssembly {
     private final byte[] payload;
     private int writeIndex;
 
-    private Assembly(int totalLength) {
+    private FastPacketAssembly(int totalLength) {
       this.payload = new byte[totalLength];
       this.writeIndex = 0;
     }

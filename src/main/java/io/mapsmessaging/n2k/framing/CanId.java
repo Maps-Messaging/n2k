@@ -19,7 +19,6 @@
 
 package io.mapsmessaging.n2k.framing;
 
-
 import lombok.Getter;
 
 @Getter
@@ -50,13 +49,13 @@ public class CanId {
    * - PF >= 240 (PDU2): PGN includes PF and PS, destination is "global" (255)
    */
   public static CanId parse(int canIdentifier) {
-    int id = canIdentifier & 0x1FFFFFFF;
+    int identifier = canIdentifier & 0x1FFFFFFF;
 
-    int priority = (id >> 26) & 0x07;
-    int pf = (id >> 16) & 0xFF;
-    int ps = (id >> 8) & 0xFF;
-    int source = id & 0xFF;
-    int dp = (id >> 24) & 0x01;
+    int priority = (identifier >> 26) & 0x07;
+    int pf = (identifier >> 16) & 0xFF;
+    int ps = (identifier >> 8) & 0xFF;
+    int source = identifier & 0xFF;
+    int dataPage = (identifier >> 24) & 0x01;
 
     int pgn;
     int destination;
@@ -64,11 +63,11 @@ public class CanId {
     if (pf < 240) {
       // PDU1
       destination = ps;
-      pgn = (dp << 16) | (pf << 8);
+      pgn = (dataPage << 16) | (pf << 8);
     } else {
       // PDU2
       destination = 255;
-      pgn = (dp << 16) | (pf << 8) | ps;
+      pgn = (dataPage << 16) | (pf << 8) | ps;
     }
 
     return new CanId(priority, pgn, source, destination);
