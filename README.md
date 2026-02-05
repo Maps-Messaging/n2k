@@ -112,6 +112,9 @@ Expect ongoing refinement as metadata issues are identified and resolved.
 
 ---
 
+Want to go deeper? 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Maps-Messaging/n2k)
+
 ## Getting Started
 
 ### Build the registry
