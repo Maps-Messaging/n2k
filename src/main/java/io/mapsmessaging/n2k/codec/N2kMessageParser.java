@@ -96,6 +96,28 @@ public class N2kMessageParser {
         processor.unpack(field, payload, decoded);
       }
     }
+    return payload;
+  }
+
+  public byte[] encodeFromSource(int pgn, FieldValueSource source) {
+    N2kCompiledMessage message = registry.getRequiredMessage(pgn);
+    if (message == null) {
+      return new byte[0];
+    }
+    if (source == null) {
+      throw new IllegalArgumentException("FieldValueSource is null");
+    }
+
+    int payloadLengthBytes = computePayloadLengthBytes(message, source);
+    byte[] payload = new byte[payloadLengthBytes];
+    Arrays.fill(payload, (byte) 0xFF);
+
+    for (N2kCompiledField field : message.getFields()) {
+      Processor processor = PROCESSORS.get(field.getFieldType());
+      if (processor != null) {
+        processor.unpack(field, payload, source);
+      }
+    }
 
     return payload;
   }
@@ -138,6 +160,43 @@ public class N2kMessageParser {
     return requiredBytes;
   }
 
+  private static int computePayloadLengthBytes(N2kCompiledMessage message, FieldValueSource source) {
+    int requiredBitExclusive = message.getMinimumLengthBytes() << 3;
+
+    for (N2kCompiledField field : message.getFields()) {
+      if (!shouldWriteField(field, source)) {
+        continue;
+      }
+
+      int endBitExclusive = field.getBitOffset() + field.getBitLength();
+      if (endBitExclusive > requiredBitExclusive) {
+        requiredBitExclusive = endBitExclusive;
+      }
+    }
+
+    int requiredBytes = (requiredBitExclusive + 7) >>> 3;
+
+    if (message.getLengthType() == io.mapsmessaging.n2k.model.N2kMessageLengthType.FIXED) {
+      Integer fixedLengthBytes = message.getFixedLengthBytes();
+      if (fixedLengthBytes == null) {
+        throw new IllegalStateException(
+            "FIXED lengthType but fixedLengthBytes is null for PGN " + message.getPgn()
+        );
+      }
+
+      if (requiredBytes > fixedLengthBytes) {
+        throw new IllegalArgumentException(
+            "PGN " + message.getPgn() +
+                " requires " + requiredBytes +
+                " bytes based on provided fields, but fixed length is " + fixedLengthBytes
+        );
+      }
+
+      return fixedLengthBytes;
+    }
+
+    return requiredBytes;
+  }
 
   private static boolean shouldWriteField(N2kCompiledField field, JsonObject decoded) {
     if (field.isReserved()) {
@@ -156,4 +215,21 @@ public class N2kMessageParser {
     return decoded.has(id);
   }
 
+  private static boolean shouldWriteField(N2kCompiledField field, FieldValueSource source) {
+    if (field.isReserved()) {
+      return true;
+    }
+
+    String id = field.getId();
+    if (id == null || id.isBlank()) {
+      return false;
+    }
+
+    return switch (field.getFieldType()) {
+      case STRING_FIX -> source.getString(id) != null;
+      case LOOKUP -> source.getLong(id) != null;
+      case NUMBER -> source.getDouble(id) != null;
+      default -> source.has(id);
+    };
+  }
 }

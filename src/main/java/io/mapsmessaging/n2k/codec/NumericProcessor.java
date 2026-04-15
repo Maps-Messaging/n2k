@@ -24,6 +24,7 @@ import io.mapsmessaging.n2k.compile.N2kCompiledField;
 
 public class NumericProcessor implements Processor {
 
+  @Override
   public void pack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
     long raw =
         N2kBitCodec.extractBits(
@@ -38,20 +39,37 @@ public class NumericProcessor implements Processor {
     decoded.addProperty(field.getId(), value);
   }
 
+  @Override
   public void unpack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
     if (!decoded.has(field.getId()) || decoded.get(field.getId()).isJsonNull()) {
       return;
     }
 
     double numericValue = decoded.get(field.getId()).getAsDouble();
+    writeNumericValue(field, payload, numericValue);
+  }
 
+  @Override
+  public void unpack(N2kCompiledField field, byte[] payload, FieldValueSource source) {
+    Double numericValue = source.getDouble(field.getId());
+    if (numericValue != null) {
+      writeNumericValue(field, payload, numericValue);
+      return;
+    }
+
+    Long longValue = source.getLong(field.getId());
+    if (longValue != null) {
+      writeNumericValue(field, payload, longValue.doubleValue());
+    }
+  }
+
+  private static void writeNumericValue(N2kCompiledField field, byte[] payload, double numericValue) {
     double resolution = field.getResolution();
     if (resolution == 0.0) {
       throw new IllegalStateException("Resolution is zero for numeric field " + field.getId());
     }
 
     double offset = field.getOffset();
-
     double unscaled = (numericValue - offset) / resolution;
     long rawValue = Math.round(unscaled);
 
@@ -74,15 +92,17 @@ public class NumericProcessor implements Processor {
     );
   }
 
-
   private static void validateRawValue(N2kCompiledField field, long rawValue) {
     if (!field.isSigned()) {
       if (rawValue < 0) {
         throw new IllegalArgumentException("Unsigned field " + field.getId() + " cannot be negative");
       }
+
       long max = field.getMask();
       if (rawValue > max) {
-        throw new IllegalArgumentException("Field " + field.getId() + " out of range: " + rawValue + " max=" + max);
+        throw new IllegalArgumentException(
+            "Field " + field.getId() + " out of range: " + rawValue + " max=" + max
+        );
       }
     }
     else {

@@ -19,20 +19,13 @@
 
 package io.mapsmessaging.n2k.codec;
 
-import com.google.gson.JsonObject;
-import io.mapsmessaging.n2k.compile.N2kCompiledField;
+public interface FieldValueSource {
 
-public interface Processor {
+  boolean has(String fieldId);
 
-  default void pack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
-    // no-op
-  }
+  Long getLong(String fieldId);
 
-  default void unpack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
-    // no-op
-  }
+  Double getDouble(String fieldId);
 
-  default void unpack(N2kCompiledField field, byte[] payload, FieldValueSource source) {
-    // no-op
-  }
+  String getString(String fieldId);
 }

@@ -31,21 +31,28 @@ public class ReservedProcessor implements Processor {
 
   @Override
   public void unpack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
+    writeReserved(field, payload);
+  }
+
+  @Override
+  public void unpack(N2kCompiledField field, byte[] payload, FieldValueSource source) {
+    writeReserved(field, payload);
+  }
+
+  private static void writeReserved(N2kCompiledField field, byte[] payload) {
     int bitLength = field.getBitLength();
 
-    // Fast path: whole bytes
     if (field.getStartBit() == 0 && (bitLength & 7) == 0) {
       int start = field.getStartByte();
       int lengthBytes = bitLength >>> 3;
 
       int endExclusive = Math.min(payload.length, start + lengthBytes);
-      for (int i = start; i < endExclusive; i++) {
-        payload[i] = (byte) 0xFF;
+      for (int index = start; index < endExclusive; index++) {
+        payload[index] = (byte) 0xFF;
       }
       return;
     }
 
-    // Slow path: bit aligned, fill using insertBits in <= 63-bit chunks
     int bitsRemaining = bitLength;
     int bitOffset = field.getBitOffset();
 

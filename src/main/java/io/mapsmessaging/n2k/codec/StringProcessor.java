@@ -21,6 +21,7 @@ package io.mapsmessaging.n2k.codec;
 
 import com.google.gson.JsonObject;
 import io.mapsmessaging.n2k.compile.N2kCompiledField;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -69,7 +70,6 @@ public class StringProcessor implements Processor {
       return;
     }
 
-    // Deterministic padding for STRING_FIX: spaces, not NULs, not 0xFF.
     Arrays.fill(payload, start, start + safeLength, (byte) 0x20);
 
     if (!decoded.has(field.getId()) || decoded.get(field.getId()).isJsonNull()) {
@@ -86,13 +86,42 @@ public class StringProcessor implements Processor {
     System.arraycopy(source, 0, payload, start, copyLength);
   }
 
+  @Override
+  public void unpack(N2kCompiledField field, byte[] payload, FieldValueSource source) {
+    if (field.getStartBit() != 0) {
+      throw new UnsupportedOperationException(
+          "STRING_FIX must be byte-aligned: " + field.getId() + " startBit=" + field.getStartBit()
+      );
+    }
+
+    int start = field.getStartByte();
+    int length = field.getBytesToRead();
+
+    int endExclusive = Math.min(payload.length, start + length);
+    int safeLength = Math.max(0, endExclusive - start);
+    if (safeLength <= 0) {
+      return;
+    }
+
+    Arrays.fill(payload, start, start + safeLength, (byte) 0x20);
+
+    String text = source.getString(field.getId());
+    if (text == null || text.isEmpty()) {
+      return;
+    }
+
+    byte[] sourceBytes = text.getBytes(StandardCharsets.ISO_8859_1);
+    int copyLength = Math.min(safeLength, sourceBytes.length);
+    System.arraycopy(sourceBytes, 0, payload, start, copyLength);
+  }
+
   private static String trimRight(String input, char... trimChars) {
     int end = input.length();
     while (end > 0) {
       char c = input.charAt(end - 1);
       boolean match = false;
-      for (char t : trimChars) {
-        if (c == t) {
+      for (char trimChar : trimChars) {
+        if (c == trimChar) {
           match = true;
           break;
         }

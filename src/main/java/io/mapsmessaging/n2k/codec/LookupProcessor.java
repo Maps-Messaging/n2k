@@ -24,6 +24,7 @@ import io.mapsmessaging.n2k.compile.N2kCompiledField;
 
 public class LookupProcessor implements Processor {
 
+  @Override
   public void pack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
     long raw =
         N2kBitCodec.extractBits(
@@ -34,16 +35,30 @@ public class LookupProcessor implements Processor {
             field.getMask(),
             field.isSigned(),
             field.getBitLength());
-    decoded.addProperty(field.getId(),(int) (raw & field.getMask()));
+    decoded.addProperty(field.getId(), (int) (raw & field.getMask()));
   }
 
+  @Override
   public void unpack(N2kCompiledField field, byte[] payload, JsonObject decoded) {
     if (!decoded.has(field.getId()) || decoded.get(field.getId()).isJsonNull()) {
       return;
     }
 
     long rawValue = decoded.get(field.getId()).getAsLong();
+    writeLookupValue(field, payload, rawValue);
+  }
 
+  @Override
+  public void unpack(N2kCompiledField field, byte[] payload, FieldValueSource source) {
+    Long rawValue = source.getLong(field.getId());
+    if (rawValue == null) {
+      return;
+    }
+
+    writeLookupValue(field, payload, rawValue);
+  }
+
+  private static void writeLookupValue(N2kCompiledField field, byte[] payload, long rawValue) {
     long max = (field.getBitLength() >= 64) ? -1L : ((1L << field.getBitLength()) - 1L);
     if (field.getBitLength() < 64 && rawValue > max) {
       rawValue = max;
@@ -62,5 +77,5 @@ public class LookupProcessor implements Processor {
     );
   }
 
-  public LookupProcessor(){}
+  public LookupProcessor() {}
 }
